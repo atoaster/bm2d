@@ -33,6 +33,14 @@ sudo ln -s "$(pwd)/bm2d" /usr/local/bin/bm2d
 ln -s "$(pwd)/bm2d" ~/.local/bin/bm2d
 ```
 
+For quick access, add an alias to your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+alias bm='bm2d'
+```
+
+Then just use `bm 'your query'` instead of `bm2d`.
+
 ## Backend Setup
 
 bm2d supports three AI backends. Set the `BM2D_BACKEND` environment variable to choose one (defaults to `claude`).
