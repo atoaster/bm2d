@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 BM2D_BACKEND="${BM2D_BACKEND:-claude}"
 
@@ -44,13 +44,17 @@ ${dir_context}
 ${query}
 </request>"
 
+# -- Temp file for output --
+tmpfile=$(mktemp)
+trap 'rm -f "$tmpfile"' EXIT
+
 # -- Backend functions --
 
 call_claude() {
     local full_prompt="${system_prompt}
 
 ${user_prompt}"
-    claude --print --model claude-sonnet-4-6 "$full_prompt"
+    printf '%s' "$full_prompt" | claude --print --model claude-sonnet-4-6 > "$tmpfile" 2>/dev/null
 }
 
 call_openai() {
@@ -73,7 +77,7 @@ call_openai() {
     curl -s https://api.openai.com/v1/chat/completions \
         -H "Authorization: Bearer ${OPENAI_API_KEY}" \
         -H "Content-Type: application/json" \
-        -d "$payload" | jq -r '.choices[0].message.content'
+        -d "$payload" | jq -r '.choices[0].message.content' > "$tmpfile"
 }
 
 call_gemini() {
@@ -92,7 +96,7 @@ call_gemini() {
         }')
     curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}" \
         -H "Content-Type: application/json" \
-        -d "$payload" | jq -r '.candidates[0].content.parts[0].text'
+        -d "$payload" | jq -r '.candidates[0].content.parts[0].text' > "$tmpfile"
 }
 
 # -- Spinner --
@@ -108,23 +112,23 @@ spin() {
 
 spin &
 spinner_pid=$!
-trap 'kill "$spinner_pid" 2>/dev/null; printf "\r\033[K" >&2' EXIT
 
 case "$BM2D_BACKEND" in
-    claude) result=$(call_claude) ;;
-    openai) result=$(call_openai) ;;
-    gemini) result=$(call_gemini) ;;
+    claude) call_claude ;;
+    openai) call_openai ;;
+    gemini) call_gemini ;;
     *)
-        kill "$spinner_pid" 2>/dev/null
+        kill "$spinner_pid" 2>/dev/null || true
+        wait "$spinner_pid" 2>/dev/null || true
         printf '\r\033[K' >&2
         echo "Error: unknown backend '${BM2D_BACKEND}'. Use: claude, openai, or gemini" >&2
         exit 1
         ;;
 esac
 
-kill "$spinner_pid" 2>/dev/null
-wait "$spinner_pid" 2>/dev/null
+kill "$spinner_pid" 2>/dev/null || true
+wait "$spinner_pid" 2>/dev/null || true
 printf '\r\033[K' >&2
-trap - EXIT
 
-echo "$result"
+# Strip any markdown code fences or backticks the model may add
+sed -e 's/^```\(bash\)\?$//' -e 's/^`\(.*\)`$/\1/' "$tmpfile" | grep -v '^$'
