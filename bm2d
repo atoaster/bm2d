@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then
+    echo "Usage: bm2d '<describe what you want to do>'"
+    echo "Example: bm2d 'convert all videos to h265'"
+    exit 0
+fi
+
+query="$*"
+dir_context="Current directory: $(pwd)"$'\n'
+
+entries=$(ls -1 2>/dev/null | head -200)
+if [[ -n "$entries" ]]; then
+    count=$(echo "$entries" | wc -l)
+    dir_context+="Files/directories ($count entries):"$'\n'"$entries"
+else
+    dir_context+="Directory is empty."
+fi
+
+if git rev-parse --is-inside-work-tree &>/dev/null; then
+    dir_context+=$'\n'"Inside a git repository."
+fi
+
+prompt="You are a bash one-liner generator. You MUST output ONLY a single bash one-liner that can be directly executed in a bash terminal. Your entire response must be valid bash. Rules:
+- No explanations, no comments, no markdown, no code fences, no English text whatsoever.
+- Only output the command itself. Nothing before it, nothing after it.
+- Always prefer one-liners using pipes, semicolons, &&, subshells, or for loops on a single line.
+- If the request is impossible or nonsensical, output: echo \"Error: cannot generate command\"
+- Use the actual files and extensions present in the directory context below.
+
+<directory_context>
+${dir_context}
+</directory_context>
+
+<request>
+${query}
+</request>"
+
+# Spinner
+spinner_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+spin() {
+    local i=0
+    while true; do
+        printf '\r\033[36m%s \033[0m\033[2mthinking...\033[0m' "${spinner_frames[i++ % ${#spinner_frames[@]}]}" >&2
+        sleep 0.08
+    done
+}
+
+spin &
+spinner_pid=$!
+trap 'kill "$spinner_pid" 2>/dev/null; printf "\r\033[K" >&2' EXIT
+
+result=$(claude --print --model claude-sonnet-4-6 "$prompt")
+
+kill "$spinner_pid" 2>/dev/null
+wait "$spinner_pid" 2>/dev/null
+printf '\r\033[K' >&2
+trap - EXIT
+
+echo "$result"
