@@ -3,7 +3,12 @@ set -uo pipefail
 
 BM2D_BACKEND="${BM2D_BACKEND:-claude}"
 
-if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then
+if [[ $# -eq 0 ]]; then
+    echo "Usage: bm2d '<describe what you want to do>'" >&2
+    exit 1
+fi
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "Usage: bm2d '<describe what you want to do>'"
     echo "Example: bm2d 'convert all videos to h265'"
     echo ""
@@ -44,6 +49,27 @@ ${dir_context}
 ${query}
 </request>"
 
+# -- Validate backend and keys early --
+case "$BM2D_BACKEND" in
+    claude) ;;
+    openai)
+        if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "Error: OPENAI_API_KEY is not set" >&2
+            exit 1
+        fi
+        ;;
+    gemini)
+        if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+            echo "Error: GEMINI_API_KEY is not set" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Error: unknown backend '${BM2D_BACKEND}'. Use: claude, openai, or gemini" >&2
+        exit 1
+        ;;
+esac
+
 # -- Temp file for output --
 tmpfile=$(mktemp)
 trap 'rm -f "$tmpfile"' EXIT
@@ -58,10 +84,6 @@ ${user_prompt}"
 }
 
 call_openai() {
-    if [[ -z "${OPENAI_API_KEY:-}" ]]; then
-        echo "Error: OPENAI_API_KEY is not set" >&2
-        exit 1
-    fi
     local payload
     payload=$(jq -n \
         --arg sys "$system_prompt" \
@@ -81,10 +103,6 @@ call_openai() {
 }
 
 call_gemini() {
-    if [[ -z "${GEMINI_API_KEY:-}" ]]; then
-        echo "Error: GEMINI_API_KEY is not set" >&2
-        exit 1
-    fi
     local payload
     payload=$(jq -n \
         --arg sys "$system_prompt" \
@@ -117,13 +135,6 @@ case "$BM2D_BACKEND" in
     claude) call_claude ;;
     openai) call_openai ;;
     gemini) call_gemini ;;
-    *)
-        kill "$spinner_pid" 2>/dev/null || true
-        wait "$spinner_pid" 2>/dev/null || true
-        printf '\r\033[K' >&2
-        echo "Error: unknown backend '${BM2D_BACKEND}'. Use: claude, openai, or gemini" >&2
-        exit 1
-        ;;
 esac
 
 kill "$spinner_pid" 2>/dev/null || true
