@@ -23,7 +23,7 @@ du -sh */ | sort -rh
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/bm2d.git
+git clone https://github.com/atoaster/bm2d.git
 cd bm2d
 chmod +x bm2d
 
